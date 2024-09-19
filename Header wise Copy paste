@@ -1,0 +1,59 @@
+function transferNewFormDataUsingUniqueID() {
+  // Define sheet names
+  // This is final
+  const responseSheetName = "Complaints Form";
+  const destinationSheetName = "Complaints";
+
+  // Get the sheets
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const responseSheet = ss.getSheetByName(responseSheetName);
+  const destinationSheet = ss.getSheetByName(destinationSheetName);
+
+  // Get the data from the form response sheet
+  const responseData = responseSheet.getDataRange().getValues();
+
+  // Get the headers from the form response sheet
+  const responseHeaders = responseData[0];
+  const responseHeaderCount = responseHeaders.length; // Number of headers in form response
+
+  // Get the headers and data from the destination sheet
+  const destinationData = destinationSheet.getDataRange().getValues();
+  destinationHeaders = destinationData[8];
+
+  // Find the index of the 'Unique ID' column in both sheets
+  const uniqueIDIndexResponse = responseHeaders.indexOf("Unique ID");
+  const uniqueIDIndexDestination = destinationHeaders.indexOf("Unique ID");
+
+  if (uniqueIDIndexResponse === -1 || uniqueIDIndexDestination === -1) {
+    Logger.log("Unique ID column not found in one or both sheets.");
+    return;
+  }
+
+  // Create a list of unique IDs that exist in the destination sheet using a Set for faster lookup
+  const existingUniqueIDs = new Set(destinationData.slice(1).map(row => row[uniqueIDIndexDestination]));
+
+  Logger.log("Existing IDs: " + Array.from(existingUniqueIDs).join(", "));
+
+  // Iterate over each response row (starting from row 2)
+  for (let i = 1; i < responseData.length; i++) {
+    const row = responseData[i];
+    const uniqueID = row[uniqueIDIndexResponse];
+
+    if (!existingUniqueIDs.has(uniqueID)) {
+      let newRow = new Array(destinationHeaders.length).fill("");
+
+      destinationHeaders.forEach((header, index) => {
+        const responseIndex = responseHeaders.indexOf(header);
+        if (responseIndex !== -1) {
+          newRow[index] = row[responseIndex];
+        }
+      });
+
+      // Append the new row to the destination sheet
+      destinationSheet.appendRow(newRow);
+      Logger.log("Added row for Unique ID: " + uniqueID);
+    } else {
+      Logger.log("Skipping duplicate Unique ID: " + uniqueID);
+    }
+  }
+}
