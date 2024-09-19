@@ -1,0 +1,28 @@
+function onEdit1234(e) {
+  // Get the active sheet
+  var sheet = e.source.getActiveSheet();
+  
+  // Check if the sheet name is "Sheet1"
+  if (sheet.getName() == "Data") {
+    // Get the range that was edited
+    var range = e.range;
+    
+    // Check if the edited column is C (3rd column)
+    if (range.getColumn() == 30) {
+      // Get the email of the user who made the edit
+      var email = Session.getActiveUser().getEmail();
+      
+      // Get the current timestamp
+      var timestamp = new Date();
+      
+      // Format the timestamp (e.g., "YYYY-MM-DD HH:MM:SS")
+      var formattedTimestamp = Utilities.formatDate(timestamp, Session.getScriptTimeZone(), "dd-MM-yyyy HH:mm:ss");
+      
+      // Concatenate email and timestamp
+      var emailAndTimestamp = email + " | " + formattedTimestamp;
+      
+      // Set the concatenated email and timestamp in column D of the same row
+      sheet.getRange(range.getRow(), 44).setValue(emailAndTimestamp);
+    }
+  }
+}
