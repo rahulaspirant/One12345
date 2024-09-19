@@ -1,0 +1,69 @@
+/*
+ * Global Variables - https://gist.github.com/rubenrivera/4ed2110cda3fbdbc29d2d2d3a4af29c0
+ */
+
+// Global Variables
+var formId = '1yZmdUS9DAADtTqj-0Omzdi4QExEIAFolzDd2Xc_jtp8';
+var sheetName = 'Data';
+var columnName = 'FormEditURL';
+var startRow = 2;
+
+function getEditResponseUrls() {
+  var lock = LockService.getScriptLock();
+  try {
+    // Attempt to acquire the lock and wait for up to 60 seconds
+    lock.waitLock(60000);
+    
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues(); 
+    var columnIndex = headers[0].indexOf(columnName);
+    var data = sheet.getDataRange().getValues();
+    var form = FormApp.openById(formId);
+
+    for (var i = startRow - 1; i < data.length; i++) {
+      if (data[i][2] != '' && data[i][columnIndex] == '') { // Changed data[i][0] to data[i][2]
+        var timestamp = data[i][2]; // Changed from data[i][0] to data[i][2]
+
+        // Convert timestamp to string if it's not already
+        if (typeof timestamp !== 'string') {
+          timestamp = Utilities.formatDate(new Date(timestamp), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm:ss');
+        }
+
+        try {
+          // Ensure timestamp is in the correct format
+          var parts = timestamp.split(' ');
+          if (parts.length !== 2) {
+            Logger.log("Timestamp format incorrect for row " + (i + 1) + ": " + timestamp);
+            continue;
+          }
+
+          var dateParts = parts[0].split('/');
+          var timeParts = parts[1].split(':');
+          if (dateParts.length !== 3 || timeParts.length !== 3) {
+            Logger.log("Date or time format incorrect for row " + (i + 1) + ": " + timestamp);
+            continue;
+          }
+
+          var formattedTimestamp = new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1], timeParts[2]);
+          Logger.log("Processing row " + (i + 1) + ", Formatted Timestamp: " + formattedTimestamp);
+
+          var formSubmitted = form.getResponses(formattedTimestamp);
+          if (formSubmitted.length < 1) {
+            Logger.log("No form responses found for timestamp: " + formattedTimestamp);
+            continue;
+          }
+
+          var editResponseUrl = formSubmitted[0].getEditResponseUrl();
+          sheet.getRange(i + 1, columnIndex + 1).setValue(editResponseUrl);
+        } catch (e) {
+          Logger.log("Error processing row " + (i + 1) + ": " + e.message);
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log("Failed to acquire lock: " + e.message);
+  } finally {
+    // Ensure the lock is released even if an error occurs
+    lock.releaseLock();
+  }
+}
