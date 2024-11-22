@@ -1,0 +1,87 @@
+function todayFollowup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dataSheet = ss.getSheetByName("Data");
+  var lastRow = dataSheet.getLastRow();
+  var dataRange = dataSheet.getRange("A1:AI" + lastRow);
+  var dataValues = dataRange.getValues();
+  var headers = dataValues[0];
+  
+  // Calculate today's date
+    var today = new Date();
+    today.setDate(today.getDate());
+    var formattedDate = Utilities.formatDate(today, Session.getScriptTimeZone(), "dd-MM-yyy");
+
+  // Calculate current time
+    var formattedTime = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "HH:mm");
+
+
+
+  
+  // Group data by sales executives
+  var groupedData = {};
+  for (var i = 1; i < dataValues.length; i++) {
+    var row = dataValues[i];
+    var salesExecEmail = row[7]; // Assuming sales executives' emails are in column G
+    var execName = row[6]; // Assuming sales executives' names are in column F
+    var condition1 = row[12] instanceof Date ? Utilities.formatDate(row[12], Session.getScriptTimeZone(), "dd-MM-yyy") : ''; //follow up date
+    var condition2 = row[2] instanceof Date ? Utilities.formatDate(row[2], Session.getScriptTimeZone(), "dd-MM-yyy") : ''; //Timestamp
+    var condition3 = row[4]; // type of inquiry
+    var condition4 = row[9]; // cust name
+    var condition5 = row[10]; // mob number
+    var condition6 = row[11]instanceof Date ? Utilities.formatDate(row[11], Session.getScriptTimeZone(), "dd-MM-yyy") : ''; //Date of Visit
+    var condition7 = row[13]; // Sales stage
+    var condition8 = row[15]; // Total No. of Pax
+    var condition9 = row[3]; // Lead source
+    var condition10 = row[12]instanceof Date ? Utilities.formatDate(row[12], Session.getScriptTimeZone(), "dd-MM-yyy") : ''; // follow up date
+    
+    //var condition9 = '<a href="' + row[27] + '">Edit Form</a>'; // Wrap URL in anchor tag & this was used for sending link
+    
+
+    if (condition1 === formattedDate && row[21] === "") {
+      if (!groupedData[salesExecEmail]) {
+        groupedData[salesExecEmail] = { name: execName, data: [] };
+      }
+      groupedData[salesExecEmail].data.push([condition2, condition3, condition4, condition5, condition6, condition7, condition8,condition9,condition10]);
+
+      Logger.log(condition1);
+    }
+  }
+  
+  // Sending reminder emails
+  for (var execEmail in groupedData) {
+    var execName = groupedData[execEmail].name;
+    var execData = groupedData[execEmail].data;
+    var emailBody = "<html><body><p>Dear " + execName + ",</p>";
+    //emailBody += "<p>Here are your follow up leads for " + formattedDate + ":</p>";
+    emailBody += "<p>Here are your follow-up leads for " + formattedDate + " at " + formattedTime + ":</p>";
+
+    emailBody += "<table border='1'><tr>";
+    
+    // Add headers
+    emailBody += "<th>" + headers[2] + "</th><th>" + headers[4] + "</th><th>" + headers[9] + "</th><th>" + headers[10] + "</th><th>" + headers[11] + "</th><th>" + headers[13] + "</th><th>" + headers[15] + "</th><th>" + headers[3] + "</th><th>" + headers[12] +  "</th></tr>";
+    //This are columns which are defined by row[1]
+
+    // Add data rows
+    for (var j = 0; j < execData.length; j++) {
+      var rowData = execData[j];
+      emailBody += "<tr>";
+      for (var k = 0; k < rowData.length; k++) {
+        emailBody += "<td>" + rowData[k] + "</td>";
+      }
+      emailBody += "</tr>";
+    }
+    emailBody += "</table></body></html>";
+    
+    // Send email
+    MailApp.sendEmail({
+      to: execEmail,
+      cc: "umang.panchal@greatescape.co.in,manish.singh@greatescape.co.in", // Add the email address(es) you want to include in CC
+      //subject: "Today's Follow up Leads for " + execName ,
+      subject: "Today's Follow-up Leads for " + execName + " as of " + formattedTime,
+
+      htmlBody: emailBody
+    });
+  }
+    //Logger.log("today: " + formattedDate);
+    //Logger.log("Value of condition1 (Date): " + row[19]);
+}
