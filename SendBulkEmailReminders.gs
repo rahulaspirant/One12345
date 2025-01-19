@@ -62,7 +62,7 @@ function SendBulkEmailReminders() {
     // Send email
     MailApp.sendEmail({
       to: execEmail,
-      cc: "umang.panchal@greatescape.co.in", // Add the email address(es) you want to include in CC
+    //  cc: "umang.panchal@greatescape.co.in", // Add the email address(es) you want to include in CC
       subject: "Pending Leads till " + execName + " For - " + formattedDate,
       htmlBody: emailBody
 });
