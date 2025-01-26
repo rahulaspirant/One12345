@@ -1,58 +1,52 @@
 function transferNewFormDataUsingUniqueID() {
   // Define sheet names
-  const formResponsesSheetName = "Complaints Form";
+  const formSheetName = "Complaints Form";
   const destinationSheetName = "Complaints";
 
   // Get the sheets
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const formResponsesSheet = spreadsheet.getSheetByName(formResponsesSheetName);
+  const formSheet = spreadsheet.getSheetByName(formSheetName);
   const destinationSheet = spreadsheet.getSheetByName(destinationSheetName);
 
-  // Get the data from the form response sheet
-  const formData = formResponsesSheet.getDataRange().getValues();
-
-  // Get the headers from the form response sheet
+  // Get data and headers from both sheets
+  const formData = formSheet.getDataRange().getValues();
   const formHeaders = formData[0];
-  const formHeaderCount = formHeaders.length; // Number of headers in form response
-
-  // Get the headers and data from the destination sheet
   const destinationData = destinationSheet.getDataRange().getValues();
-  const destinationHeaders = destinationData[8];
+  const destinationHeaders = destinationData[8]; // Assuming headers are in row 9
 
   // Find the index of the 'Unique ID' column in both sheets
-  const formUniqueIDIndex = formHeaders.indexOf("Unique ID");
-  const destinationUniqueIDIndex = destinationHeaders.indexOf("Unique ID");
+  const uniqueIDHeader = "Unique ID";
+  const formUniqueIDIndex = formHeaders.indexOf(uniqueIDHeader);
+  const destinationUniqueIDIndex = destinationHeaders.indexOf(uniqueIDHeader);
 
+  // Check if 'Unique ID' column exists in both sheets
   if (formUniqueIDIndex === -1 || destinationUniqueIDIndex === -1) {
-    Logger.log("Unique ID column not found in one or both sheets.");
+    Logger.log("Error: 'Unique ID' column not found in one or both sheets.");
     return;
   }
 
-  // Create a list of unique IDs that exist in the destination sheet using a Set for faster lookup
-  const existingDestinationUniqueIDs = new Set(destinationData.slice(1).map(row => row[destinationUniqueIDIndex]));
+  // Create a Set of existing unique IDs in the destination sheet
+  const existingUniqueIDs = new Set(destinationData.slice(9).map(row => row[destinationUniqueIDIndex]));
 
-  Logger.log("Existing IDs: " + Array.from(existingDestinationUniqueIDs).join(", "));
-
-  // Iterate over each response row (starting from row 2)
+  // Iterate over form responses (skip header row)
   for (let i = 1; i < formData.length; i++) {
     const row = formData[i];
     const uniqueID = row[formUniqueIDIndex];
 
-    if (!existingDestinationUniqueIDs.has(uniqueID)) {
-      let newRow = new Array(destinationHeaders.length).fill("");
-
-      destinationHeaders.forEach((header, index) => {
-        const formIndex = formHeaders.indexOf(header);
-        if (formIndex !== -1) {
-          newRow[index] = row[formIndex];
-        }
-      });
-
-      // Append the new row to the destination sheet
-      destinationSheet.appendRow(newRow);
-      Logger.log("Added row for Unique ID: " + uniqueID);
-    } else {
-      Logger.log("Skipping duplicate Unique ID: " + uniqueID);
+    // Skip if the unique ID already exists in the destination sheet
+    if (existingUniqueIDs.has(uniqueID)) {
+      Logger.log(`Skipping duplicate Unique ID: ${uniqueID}`);
+      continue;
     }
+
+    // Create a new row by mapping form data to destination headers
+    const newRow = destinationHeaders.map(header => {
+      const formIndex = formHeaders.indexOf(header);
+      return formIndex !== -1 ? row[formIndex] : "";
+    });
+
+    // Append the new row to the destination sheet
+    destinationSheet.appendRow(newRow);
+    Logger.log(`Added row for Unique ID: ${uniqueID}`);
   }
 }
