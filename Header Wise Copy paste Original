@@ -24,6 +24,8 @@ function updateRowsByUniqueID() {
   // Create a lookup object for the source data, using UniqueID as the key
   var sourceLookup = {};
   for (var sourceRowIndex = 1; sourceRowIndex < sourceData.length; sourceRowIndex++) { // Start from row 2 to skip headers
+    //for (var i = 1; i < data.length; i++) 
+
     var sourceRow = sourceData[sourceRowIndex]; // Current row in Source sheet
     var uniqueID = sourceRow[sourceUniqueIDColumnIndex]; // UniqueID value in the current row
     sourceLookup[uniqueID] = sourceRow; // Store the row in the lookup object
