@@ -1,0 +1,64 @@
+function highlightMatchingIDs() {
+  const mode = "INCREMENTAL";
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sourceSheet = ss.getSheetByName("Sheet1");
+  const targetSheet = ss.getSheetByName("DPR");
+
+  const sourceCol = 1;      // Unique ID column in source (A = 1)  zero based
+  const targetCol = 18;     // Unique ID column in target (R = 18) zero based
+  const conditionCol = 5;   // Column E in source (E = 5)  zero based
+
+  // ✅ Step 1: Check if any cell in Column E has "Yes"
+  const sourceLastRow = sourceSheet.getLastRow();
+  if (sourceLastRow < 2) {
+    Logger.log("No data in source sheet.");
+    return;
+  }
+
+  const conditionValues = sourceSheet.getRange(2, conditionCol, sourceLastRow - 1, 1)
+                                     .getValues()
+                                     .flat()
+                                     .map(value => String(value).trim());
+
+  const hasYes = conditionValues.includes("Yes");
+  if (!hasYes) {
+    Logger.log('Condition not met — no "Yes" found in column E of Sheet1.');
+    return;
+  }
+
+  // ✅ Step 2: Continue with incremental highlighting
+  const sourceIDs = new Set(
+    sourceSheet.getRange(2, sourceCol, sourceLastRow - 1, 1)
+      .getValues()
+      .flat()
+      .filter(String)
+  );
+
+  const targetLastRow = targetSheet.getLastRow();
+  if (targetLastRow < 2) {
+    Logger.log("No data in target sheet.");
+    return;
+  }
+
+  const targetIDs = targetSheet.getRange(2, targetCol, targetLastRow - 1, 1).getValues();
+  const existingColors = targetSheet.getRange(2, targetCol, targetLastRow - 1, 1)
+                                    .getBackgrounds();
+
+  const colors = targetIDs.map((row, i) => {
+    const id = row[0];
+    const currentColor = existingColors[i][0];
+    const isAlreadyGreen = currentColor === "#b6d7a8";
+
+    if (isAlreadyGreen) {
+      return [currentColor];
+    } else if (sourceIDs.has(id)) {
+      return ["#b6d7a8"];
+    } else {
+      return [null];
+    }
+  });
+
+  targetSheet.getRange(2, targetCol, colors.length, 1).setBackgrounds(colors);
+  Logger.log(`Highlighting done in ${mode} mode for ${colors.length} rows.`);
+}
