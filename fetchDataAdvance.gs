@@ -11,8 +11,8 @@ function fetchDataFromMouldMaster() {
     "Status as of 24-25",
   ];
 
-  const sourceSpreadsheetUrl = 'https://docs.google.com/spreadsheets/d/1t8uhbsbyB8_gcdNOp6w1sQYGEH4870y_H1lFmyJh5kk/edit?gid=952746983#gid=952746983';
-  const targetSpreadsheetUrl = 'https://docs.google.com/spreadsheets/d/104f7pi1F2a-ndTyrfDUYvMWmS8CHAv-UpcdECwPBQRA/edit?gid=0#gid=0';
+  const sourceSpreadsheetUrl = '';
+  const targetSpreadsheetUrl = '';
   const sourceSheetName = 'Mould Master File';
   const targetSheetName = 'Sheet1';
   const targetStartColumn = 1;
