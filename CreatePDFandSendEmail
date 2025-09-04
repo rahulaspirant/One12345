@@ -1,0 +1,241 @@
+
+----------------------------------------------------------------------------------------------------------------
+//Create PDF
+----------------------------------------------------------------------------------------------------------------
+/* START FUNCTION */
+function generatePDFReports() {
+  const CONFIG = {
+    SHEET_NAME: "Test Form Responses",
+    DOC_TEMPLATE_ID: "1byBpWrPlwHZW9I19790hrrtzzBBONO5Wpq4TmAuJjm8",
+    OUTPUT_FOLDER_ID: "1l1VDqcm2XNhu7KiIK-JguvexVceDLDp3",
+    MAX_IMAGE_WIDTH: 650,
+    MAX_IMAGE_HEIGHT: 850, // Added max image height
+    COLS: {
+      SITE_NAME: 3,
+      REPORT_DATE: 1,
+      IMAGE_LINK: 5,
+      PDF_LINK: 10,
+    },
+  };
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const rows = data.slice(1);
+
+  rows.forEach((row, rowIndex) => {
+    const pdfLinkCell = row[CONFIG.COLS.PDF_LINK - 1];
+    if (pdfLinkCell) return; // Skip rows with existing PDF links.
+
+    const rowData = getRowData(headers, row);
+    const siteName = row[CONFIG.COLS.SITE_NAME - 1].replace(/\//g, "-"); // Replace "/" with "-"
+
+    const rawDate = row[CONFIG.COLS.REPORT_DATE - 1];
+    const reportDate = Utilities.formatDate(
+      (rawDate instanceof Date) ? rawDate : new Date(rawDate),
+      Session.getScriptTimeZone(),
+      "dd/MM/yyyy"
+    ).replace(/\//g, "-");
+
+    const docName = `Daily Site Report - ${siteName} - ${reportDate}`;
+
+    const docCopy = createDocumentCopy(docName, CONFIG.DOC_TEMPLATE_ID, CONFIG.OUTPUT_FOLDER_ID);
+    const doc = DocumentApp.openById(docCopy.getId());
+    const body = doc.getBody();
+
+    replacePlaceholders(body, rowData);
+
+    const imageLinks = row[CONFIG.COLS.IMAGE_LINK - 1];
+    handleImages(body, imageLinks, CONFIG.MAX_IMAGE_WIDTH, CONFIG.MAX_IMAGE_HEIGHT); // Pass max height
+
+    doc.saveAndClose();
+
+    const pdfFile = saveAsPDF(docCopy, docName, CONFIG.OUTPUT_FOLDER_ID);
+    updateSheetWithPDFLink(sheet, rowIndex + 2, CONFIG.COLS.PDF_LINK, pdfFile.getUrl());
+  });
+}
+
+function getRowData(headers, row) {
+  return headers.reduce((data, header, index) => {
+    data[header] = header === "Date" && row[index] instanceof Date
+      ? Utilities.formatDate(row[index], Session.getScriptTimeZone(), "EEEE, dd MMMM yyyy")
+      : row[index];
+    return data;
+  }, {});
+}
+
+function createDocumentCopy(name, templateId, folderId) {
+  const templateFile = DriveApp.getFileById(templateId);
+  return templateFile.makeCopy(name, DriveApp.getFolderById(folderId));
+}
+
+function replacePlaceholders(body, data) {
+  for (const key in data) {
+    body.replaceText(`<<${key}>>`, data[key] || "");
+  }
+}
+
+function handleImages(body, imageLinks, maxWidth, maxHeight) { // Added maxHeight parameter
+  const placeholder = '<<Images>>';
+  const searchResult = body.findText(placeholder);
+
+  if (!imageLinks) {
+    if (searchResult) searchResult.getElement().asText().deleteText(searchResult.getStartOffset(), searchResult.getEndOffsetInclusive());
+    return;
+  }
+
+  const imageUrls = extractImageUrls(imageLinks);
+  if (!imageUrls.length) {
+    if (searchResult) searchResult.getElement().asText().deleteText(searchResult.getStartOffset(), searchResult.getEndOffsetInclusive());
+    return;
+  }
+
+  if (searchResult) {
+    const placeholderElement = searchResult.getElement();
+    placeholderElement.asText().deleteText(searchResult.getStartOffset(), searchResult.getEndOffsetInclusive());
+
+    const parentElement = placeholderElement.getParent();
+    imageUrls.forEach((url, index) => {
+      try {
+        const blobImage = fetchImageBlob(url);
+        if (blobImage) {
+          const imageParagraph = parentElement.getParent().insertParagraph(parentElement.getParent().getChildIndex(parentElement) + 1, "");
+          const image = imageParagraph.appendInlineImage(blobImage);
+
+          let newWidth = maxWidth;
+          let newHeight = (image.getHeight() / image.getWidth()) * maxWidth;
+
+          // Check and adjust if the height exceeds maxHeight
+          if (newHeight > maxHeight) {
+            newHeight = maxHeight;
+            newWidth = (image.getWidth() / image.getHeight()) * maxHeight;
+          }
+
+          image.setWidth(newWidth);
+          image.setHeight(newHeight);
+
+          if (index < imageUrls.length - 1) {
+            parentElement.getParent().insertParagraph(parentElement.getParent().getChildIndex(parentElement) + 2, "");
+          }
+        }
+      } catch (e) {
+        Logger.log(`Image fetch failed: ${url} - ${e.message}`);
+      }
+    });
+  }
+}
+
+function extractImageUrls(imageLinks) {
+  return imageLinks
+    .split(",")
+    .map(link => {
+      const matches = link.trim().match(/https:\/\/drive\.google\.com\/open\?id=(.*)/);
+      return matches ? `https://drive.google.com/uc?id=${matches[1]}` : link.trim();
+    })
+    .filter(Boolean);
+}
+
+function fetchImageBlob(url) {
+  if (url.includes("drive.google.com")) {
+    const fileIdMatch = url.match(/[-\w]{25,}/);
+    if (fileIdMatch) {
+      return DriveApp.getFileById(fileIdMatch[0]).getBlob();
+    }
+  } else {
+    const response = UrlFetchApp.fetch(url);
+    if (response.getResponseCode() === 200) {
+      return response.getBlob();
+    }
+  }
+  return null;
+}
+
+function saveAsPDF(docCopy, name, folderId) {
+  const pdfBlob = DriveApp.getFileById(docCopy.getId()).getAs("application/pdf");
+  const pdfFile = DriveApp.getFolderById(folderId).createFile(pdfBlob);
+  pdfFile.setName(`${name}.pdf`);
+
+  DriveApp.getFileById(docCopy.getId()).setTrashed(true);
+  return pdfFile;
+}
+
+function updateSheetWithPDFLink(sheet, row, col, link) {
+  sheet.getRange(row, col).setValue(link);
+}
+/* END FUNCTION */
+
+
+
+----------------------------------------------------------------------------------------------------------------
+//Send Email
+----------------------------------------------------------------------------------------------------------------
+
+function sendEmailwithAttachments() {
+  // Get the active spreadsheet and the "Daily Site Report" sheet
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Form responses');
+  
+  // Get all data from the sheet starting from row 2 (ignoring the header row)
+  const data = sheet.getDataRange().getValues();
+  
+  // Loop through each row starting from row 2 (index 1)
+  for (let i = 1; i < data.length; i++) {
+    const emailSent = data[i][44]; // Column AS - Email Sent status
+    const email = data[i][45];     // Column AT - Main email
+    const ccEmail = data[i][46];   // Column AU - CC email
+    const dateValue = data[i][8];  // Column I - Date (index 8)
+    const formattedDate = Utilities.formatDate(new Date(dateValue), Session.getScriptTimeZone(), "dd/MM/yyyy");
+    const subject = `Daily Site Report - ${formattedDate}`;
+    const soNumber = data[i][7];          // Column H (index 7) - Sales Order Number
+    const installationPerson = data[i][6]; // Column G (index 6) - Installation Person
+    const attachmentUrl = data[i][43];    // Column AR - File URL to attach
+
+    // Construct the email body
+    const body = 
+      `Dear Esteemed Client,<br><br>
+
+      Please find the report for Sales Order No: <b>${soNumber}</b> for <b>${formattedDate}</b> attached herewith.<br>
+      For concerns, you can contact the installation person: <b>${installationPerson}</b>.<br><br>
+
+      Regards,<br>
+      Installation Department,<br>
+      Arihant Water Park Equipments.`;
+
+    // Skip the row if column AS is not blank (email already sent)
+    if (emailSent) {
+      Logger.log(`Skipping row ${i + 1} as email has already been sent.`);
+      continue;
+    }
+
+    // Extract the file ID from the attachment URL in Column AR
+    const fileId = extractFileIdFromUrl(attachmentUrl);
+    if (!fileId) {
+      Logger.log(`Skipping row ${i + 1} as the attachment URL is invalid.`);
+      continue; // Skip if URL is invalid
+    }
+
+    // Prepare the attachment (file ID from Column AR)
+    const attachment = DriveApp.getFileById(fileId);
+    
+    // Send the email with the subject, body, and attachment
+    MailApp.sendEmail({
+      to: email,
+      cc: ccEmail,
+      subject: subject,
+      htmlBody: body, // Use HTML body to support bold formatting
+      attachments: [attachment.getAs(MimeType.PDF)] // Attach the file as a PDF
+    });
+
+    // Mark the row in Column AS as "Sent"
+    sheet.getRange(i + 1, 45).setValue('Sent'); // Column AS (1-based index)
+    
+    Logger.log(`Email sent to ${email}`);
+  }
+}
+
+
+// Function to extract the file ID from a Google Drive URL
+function extractFileIdFromUrl(url) {
+  const regex = /\/d\/([a-zA-Z0-9-_]+)\//;
+  const matches = url.match(regex);
+  return matches ? matches[1]:null;
+}
