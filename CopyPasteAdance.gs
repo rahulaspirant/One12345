@@ -1,4 +1,5 @@
-function fetchDataFromMouldMaster() {
+function fetchData() {
+//Single flow
   // CONFIGURATION
   const copyMode = "Selected"; // Use "All" to copy all columns, or "Selected" to copy only specific columns
   const filterEnabled = true; // Set to false to disable data filtering
@@ -97,4 +98,142 @@ function fetchDataFromMouldMaster() {
   if (selectedData.length > 0) {
     targetSheet.getRange(targetLastRow + 1, targetStartColumn, selectedData.length, selectedData[0].length).setValues(selectedData);
   }
+}
+
+
+
+/* =========================================================
+   YOUR MODULAR CODE (Updated with Logging)
+   ========================================================= */
+
+function runMouldMasterSync() {
+//modular
+
+  const config = {
+    sourceUrl: 'https://docs.google.com/spreadsheets/d/1ZPOAaV93ZUWrBxYHUrNjz6_Hm2dLKTEZ76-bTMQKSVA/edit?gid=0#gid=0',
+    targetUrl: 'https://docs.google.com/spreadsheets/d/1ZPOAaV93ZUWrBxYHUrNjz6_Hm2dLKTEZ76-bTMQKSVA/edit?gid=1068030377#gid=1068030377',
+    sourceSheetName: 'Source',
+    targetSheetName: 'Target',
+    headersToExtract: ["Student Name","Gender","Major","Marks","Joining Date"],
+    formatDate: false
+  };
+
+  // --- GET SHEETS ---
+  const sourceSheet = getSheet(config.sourceUrl, config.sourceSheetName);
+  const targetSheet = getSheet(config.targetUrl, config.targetSheetName);
+
+  // --- GET SOURCE DATA ---
+  const sourceHeaders = sourceSheet.getRange(1, 1, 1, sourceSheet.getLastColumn()).getDisplayValues()[0];
+  const sourceData = sourceSheet.getRange(1, 1, sourceSheet.getLastRow() - 2, sourceSheet.getLastColumn()).getDisplayValues();
+  
+  
+
+  const headerMap = createHeaderIndexMap(sourceHeaders);
+
+  // --- GET EXISTING ---
+  const existingMouldNums = getExistingMouldNumbers(targetSheet, 1, 4); 
+
+  // --- PROCESS ---
+  const newRows = processAndFilterData(
+    sourceData, 
+    headerMap, 
+    existingMouldNums, 
+    config.headersToExtract, 
+    config.formatDate
+  );
+
+  // --- WRITE ---
+  if (newRows.length > 0) {
+    appendDataToSheet(targetSheet, newRows, 1);
+    
+  } else {
+    
+  }
+}
+
+// --- HELPER FUNCTIONS WITH LOGS ---
+
+function getSheet(url, sheetName) {
+  
+  const ss = SpreadsheetApp.openByUrl(url);
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+  return sheet;
+}
+
+function createHeaderIndexMap(headers) {
+  const map = {};
+  headers.forEach((header, index) => {
+    map[header.trim()] = index;
+  });
+  // Log just a sample to keep it clean
+  
+  return map;
+}
+
+function getExistingMouldNumbers(sheet, columnIndex, startRow) {
+  const lastRow = sheet.getLastRow();
+  const existingSet = new Set();
+  
+  if (lastRow >= startRow) {
+    const data = sheet.getRange(startRow, columnIndex, lastRow - startRow + 1).getValues();
+    data.forEach(([val]) => {
+      if (val && String(val).trim() !== "") existingSet.add(String(val).trim());
+    });
+  }
+  
+  return existingSet;
+}
+
+function processAndFilterData(data, headerMap, existingIds, headersToExtract, formatDate) {
+  const processedRows = [];
+  let skippedAvailable = 0;
+  let skippedDuplicate = 0;
+
+  const targetIndices = headersToExtract.map(name => headerMap[name]);
+  const statusIndex = headerMap["Gender"];
+  const mouldNumIndex = headerMap["Student Name"];
+
+  
+  for (let row of data) {
+    const status = row[statusIndex];
+    const mouldNum = String(row[mouldNumIndex]).trim();
+
+    if (status !== "Male" || mouldNum === "") {
+      skippedAvailable++;
+      continue;
+    }
+
+    if (existingIds.has(mouldNum)) {
+      skippedDuplicate++;
+      continue;
+    }
+
+    const newRow = targetIndices.map((colIndex, i) => {
+      let value = row[colIndex];
+      const headerName = headersToExtract[i];
+      if (formatDate && headerName === "Final Actual Delivery Date" && value) {
+        value = formatMyDate(value);
+      }
+      return value;
+    });
+
+    processedRows.push(newRow);
+  }
+
+ 
+
+  return processedRows;
+}
+
+function appendDataToSheet(sheet, data, startColumn) {
+  const lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow + 1, startColumn, data.length, data[0].length).setValues(data);
+}
+
+function formatMyDate(dateValue) {
+  // Simple check
+  const date = new Date(dateValue);
+  if (isNaN(date)) return dateValue; 
+  return `${date.getDate()}-${date.getMonth() + 1}-${date.getFullYear()}`;
 }
