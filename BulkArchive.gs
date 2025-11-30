@@ -205,9 +205,9 @@ const ARCHIVE_CONFIG = {
   targetSheetName: 'Archive',
   sourceHeaderRow: 1,        // header row number in Source (1-based)
   targetHeaderRow: 1,        // header row number in Target (1-based)
-  archiveKeywordColumn: 37,  // column number (1-based) containing the "Archive" keyword (BD -> 56? but using 37 per your original)
+  archiveKeywordColumn: 18,  // column number (1-based) containing the "Archive" keyword (BD -> 56? but using 37 per your original)
   archiveKeywords: ['Archive'],
-  dateColumnLetter: 'AC',    // letter used to derive dynamic formulas (e.g. 'AC')
+  dateColumnLetter: 'K',    // letter used to derive dynamic formulas (e.g. 'AC')
   archiveHelperHeader: 'Archive Helper',
   emailOnHeaderMismatchTo: '' // set email if you want header mismatch reports
 };
