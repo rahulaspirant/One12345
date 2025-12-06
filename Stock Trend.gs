@@ -1,139 +1,178 @@
-function start() {
-  
-  var ss= SpreadsheetApp.getActiveSpreadsheet();                     // Get active spreadsheet
-  var setupSheet = ss.getSheetByName("SETUP");                       // Reference SETUP sheet
-  var lastRow = setupSheet.getLastRow();                             // Find last row with data
-  
+/***************** SIMPLE CONFIG ************************/
 
-  for(var y = 6; y <= lastRow; y++)                                  // Loop from row 6 to last row
-  {
-    var checkbox = setupSheet.getRange(y,8).getValue();              // Read checkbox (column H)
-    
-    if(checkbox == true)                                             // If checkbox is checked
-    {
-      setupSheet.getRange("D"+y+":G"+y).clear();                     // Clear previous result columns
-      var symbol = setupSheet.getRange(y,3).getValue();              // Get stock symbol (column C)
-      var market = setupSheet.getRange(y,2).getValue();              // Get market (column B)
-      getData(symbol, market, y);                                    // Fetch data and calculate stats
-      setLink(symbol, market, y);                                    // Set hyperlink on column I
-      setupSheet.getRange(y,8).setValue(false);                      // Uncheck checkbox after processing
+// Sheet names
+const SETUP_SHEET_NAME = "SETUP";
+const DATA_SHEET_NAME  = "DATA";
+
+// SETUP sheet layout
+const SETUP_FIRST_DATA_ROW = 6; // Your data starts at row 6
+
+// Column numbers in SETUP sheet (1-based)
+const COL_NAME       = 1;
+const COL_MARKET     = 2;
+const COL_SYMBOL     = 3;
+const COL_DAYS_DROP  = 4;
+const COL_DAYS_GAIN  = 5;
+const COL_CNS_GAIN   = 6;
+const COL_TOTAL_DAYS = 7;
+const COL_CHECK      = 8;
+const COL_LINK       = 9;
+
+// Cells in SETUP that store parameters
+const CELL_DAYS_BACK     = "B1"; // how many days back
+const CELL_PERCENT_GAIN  = "B2"; // gain threshold
+const CELL_PERCENT_DOWN  = "B3"; // drop threshold
+
+/***************** SMALL HELPERS ************************/
+
+function getSheets_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  return {
+    setup: ss.getSheetByName(SETUP_SHEET_NAME),
+    data: ss.getSheetByName(DATA_SHEET_NAME)
+  };
+}
+
+// Set all checkboxes in SETUP (from first data row downwards) to true/false
+function setAllCheckboxes_(value) {
+  var sheets = getSheets_();
+  var setupSheet = sheets.setup;
+  var lastRow = setupSheet.getLastRow();
+  if (lastRow < SETUP_FIRST_DATA_ROW) return; // nothing to do
+  Logger.log(sheets);
+
+  var numRows = lastRow - SETUP_FIRST_DATA_ROW + 1;
+  // Fill an array with the same value (true or false)
+  var values = [];
+  for (var i = 0; i < numRows; i++) {
+    values.push([value]);
+  }
+
+  setupSheet
+    .getRange(SETUP_FIRST_DATA_ROW, COL_CHECK, numRows, 1)
+    .setValues(values);
+}
+
+/***************** MAIN FUNCTIONS ************************/
+
+function start() {
+  var sheets = getSheets_();
+  var setupSheet = sheets.setup;
+  var lastRow = setupSheet.getLastRow();
+
+  for (var row = SETUP_FIRST_DATA_ROW; row <= lastRow; row++) {
+    var checkbox = setupSheet.getRange(row, COL_CHECK).getValue();
+
+    if (checkbox === true) {
+      // Clear DAYS DROP, DAYS GAIN, CNS GAIN DAY, TOTAL DAYS
+      setupSheet
+        .getRange(row, COL_DAYS_DROP, 1, 4) // from D to G in that row
+        .clearContent();
+
+      var symbol = setupSheet.getRange(row, COL_SYMBOL).getValue();
+      var market = setupSheet.getRange(row, COL_MARKET).getValue();
+
+      getData(symbol, market, row);
+      setLink(symbol, market, row);
+
+      // Uncheck after processing
+      setupSheet.getRange(row, COL_CHECK).setValue(false);
     }
   }
 }
 
 function checkAll() {
-  
-  var ss= SpreadsheetApp.getActiveSpreadsheet();                     // Get active spreadsheet
-  var setupSheet = ss.getSheetByName("SETUP");                       // Reference SETUP sheet
-  var lastRow = setupSheet.getLastRow();                             // Find last row
-  
-  for(var y = 6; y <= lastRow; y++)                                  // Loop through rows
-  {
-    setupSheet.getRange(y,8).setValue(true);                         // Set checkbox to TRUE
-  }
-
+  setAllCheckboxes_(true);
 }
 
 function uncheckAll() {
-  
-  var ss= SpreadsheetApp.getActiveSpreadsheet();                     // Get active spreadsheet
-  var setupSheet = ss.getSheetByName("SETUP");                       // Reference SETUP sheet
-  var lastRow = setupSheet.getLastRow();                             // Find last row
-  
-  for(var y = 6; y <= lastRow; y++)                                  // Loop through rows
-  {
-    setupSheet.getRange(y,8).setValue(false);                        // Set checkbox to FALSE
-  }
-
+  setAllCheckboxes_(false);
 }
 
-function setLink(symbol, market, row)
-{
-  var ss= SpreadsheetApp.getActiveSpreadsheet();                     // Get active spreadsheet
-  var setupSheet = ss.getSheetByName("SETUP");                       // Reference SETUP sheet
-  
-  // Create rich-text value with hyperlink
+function setLink(symbol, market, row) {
+  var sheets = getSheets_();
+  var setupSheet = sheets.setup;
+
   var richValue = SpreadsheetApp.newRichTextValue()
-  .setText(symbol)
-  .setLinkUrl("https://www.google.com/finance/quote/"+symbol+":"+market)
-  .build();
-  
-  setupSheet.getRange(row, 9).setRichTextValue(richValue);           // Set link in column I
+    .setText(symbol)
+    .setLinkUrl("https://www.google.com/finance/quote/" + symbol + ":" + market)
+    .build();
+
+  setupSheet.getRange(row, COL_LINK).setRichTextValue(richValue);
 }
 
 function getData(symbol, market, row) {
+  var sheets = getSheets_();
+  var dataSheet = sheets.data;
+  var setupSheet = sheets.setup;
 
-  var ss= SpreadsheetApp.getActiveSpreadsheet();                     // Get active spreadsheet
-  var dataSheet = ss.getSheetByName("DATA");                         // Sheet used for temporary calculations
-  var setupSheet = ss.getSheetByName("SETUP");                       // Reference SETUP sheet
-  
-  var percentGain = setupSheet.getRange(2,2).getValue();             // Threshold gain %
-  var percentDown = setupSheet.getRange(3,2).getValue();             // Threshold down %
-  var daysBack = setupSheet.getRange(1,2).getValue();                // Number of days to fetch data
-  
-  dataSheet.getRange("C1:D1000").clear();                            // Clear previous calculations
+  // Read parameters from SETUP
+  var daysBack    = setupSheet.getRange(CELL_DAYS_BACK).getValue();
+  var percentGain = setupSheet.getRange(CELL_PERCENT_GAIN).getValue();
+  var percentDown = setupSheet.getRange(CELL_PERCENT_DOWN).getValue();
 
-  // Place GOOGLEFINANCE formula in A1 to fetch historical prices
+  // Clear old helper columns (C and D) in DATA
+  var maxRows = dataSheet.getMaxRows();
+  dataSheet.getRange(1, 3, maxRows, 2).clearContent(); // C:D
+
+  // Put GOOGLEFINANCE formula
   var cell = dataSheet.getRange("A1");
-  cell.setFormula("=GOOGLEFINANCE(\""+market+":"+symbol+"\",\"price\",TODAY()-"+daysBack+",TODAY())");
-  
-  dataSheet.getRange("C1").setValue(symbol);                         // Store symbol in temp sheet
+  cell.setFormula(
+    '=GOOGLEFINANCE("' + market + ':' + symbol + '","price",TODAY()-' + daysBack + ',TODAY())'
+  );
 
-  var datalastRow = dataSheet.getLastRow();                          // Last row of fetched data
-  
+  // Put symbol header in C1
+  dataSheet.getRange("C1").setValue(symbol);
 
-  // Column C: Difference between today and previous day
-  for(var i = 3; i <= datalastRow; i++)
-  {
+  // Wait for data to populate (optional: sometimes needed)
+  SpreadsheetApp.flush();
+
+  var datalastRow = dataSheet.getLastRow();
+
+  // Set difference formula in column C
+  for (var i = 3; i <= datalastRow; i++) {
     var pastRow = i - 1;
-    var cell = dataSheet.getRange(i,3);
-    cell.setFormula("=B"+i+"-B"+pastRow+"");                         // Price change
+    var diffCell = dataSheet.getRange(i, 3);
+    diffCell.setFormula("=B" + i + "-B" + pastRow);
   }
 
-  // Column D: Percentage change
-  for(var i = 3; i <= datalastRow; i++)
-  {
-    var pastRow = i - 1;
-    var cell = dataSheet.getRange(i,4);
-    cell.setFormula("=(C"+i+"/B"+pastRow+")*100");                   // % change formula
+  // Set percent change formula in column D
+  for (var j = 3; j <= datalastRow; j++) {
+    var pastRow2 = j - 1;
+    var pctCell = dataSheet.getRange(j, 4);
+    pctCell.setFormula("=(C" + j + "/B" + pastRow2 + ")*100");
   }
 
-  var percentGainTotal = 0;                                          // Count of gains crossing threshold
-  var percentDownTotal = 0;                                          // Count of drops crossing threshold
-  var consecutiveDaysGain = 0;                                       // Count of continuous positive % days
+  SpreadsheetApp.flush(); // make sure formulas calculate
 
-  // Count how many % changes exceed thresholds
-  for(var i = 3; i <= datalastRow; i++)
-  {
-    var currentValue = dataSheet.getRange(i,4).getValue();
-    if(currentValue > percentGain)
-    {
-      percentGainTotal++;                                            // Track gain days
+  var percentGainTotal = 0;
+  var percentDownTotal = 0;
+  var consecutiveDaysGain = 0;
+
+  // Count gain / drop days
+  for (var r = 3; r <= datalastRow; r++) {
+    var currentValue = dataSheet.getRange(r, 4).getValue(); // column D
+    if (currentValue > percentGain) {
+      percentGainTotal++;
     }
-    if(currentValue < percentDown * -1)
-    {
-      percentDownTotal++;                                            // Track drop days
+    if (currentValue < percentDown * -1) {
+      percentDownTotal++;
     }
   }
 
-  // Count consecutive positive days starting from most recent day
-  for(var i = datalastRow; i >= 3; i--)
-  {
-    var currentValue = dataSheet.getRange(i,4).getValue();
-    if(currentValue > 0)
-    {
-      consecutiveDaysGain++;                                         // Increase streak count
-    }
-    else
-    {
-      break;                                                         // Stop when a negative % found
+  // Count consecutive gain days from the bottom
+  for (var r2 = datalastRow; r2 >= 3; r2--) {
+    var currentValue2 = dataSheet.getRange(r2, 4).getValue();
+    if (currentValue2 > 0) {
+      consecutiveDaysGain++;
+    } else {
+      break;
     }
   }
 
-  // Output calculated results back to SETUP sheet
-  setupSheet.getRange(row,5).setValue(percentGainTotal);             // Total gain days
-  setupSheet.getRange(row,4).setValue(percentDownTotal);             // Total down days
-  setupSheet.getRange(row,6).setValue(consecutiveDaysGain);          // Consecutive gains
-  setupSheet.getRange(row,7).setValue(datalastRow-1);                // Total days of data (excluding header)
-
+  // Write back to SETUP
+  setupSheet.getRange(row, COL_DAYS_GAIN).setValue(percentGainTotal);
+  setupSheet.getRange(row, COL_DAYS_DROP).setValue(percentDownTotal);
+  setupSheet.getRange(row, COL_CNS_GAIN).setValue(consecutiveDaysGain);
+  setupSheet.getRange(row, COL_TOTAL_DAYS).setValue(datalastRow - 1);
 }
